@@ -1,7 +1,0 @@
-/home/novikovna/Documents/projects/test_task/CMakeFiles/install/strip.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/edit_cache.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/zmq_app.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/rebuild_cache.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/list_install_components.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/install/local.dir
-/home/novikovna/Documents/projects/test_task/CMakeFiles/install.dir

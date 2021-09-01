@@ -1,1 +1,0 @@
-/usr/bin/c++    -rdynamic CMakeFiles/zmq_app.dir/application.cpp.o  -o zmq_app 
