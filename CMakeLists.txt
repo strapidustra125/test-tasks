@@ -6,7 +6,10 @@ project(zmq_app VERSION 1.0 LANGUAGES CXX)
 
 # Скомпилировать исполняемый файл "zmq_app" из исходников
 # "application.cpp":
-add_executable(zmq_app application.cpp)
+add_executable(zmq_app application.cpp zmq.hpp)
+
+# Заголовок библиотеки
+#target_precompile_headers(zmq_app zmq.hpp)
 
 # Присвоить переменной "C_STAND_VALUE" значение свойства "C_STANDARD":
 get_target_property(C_STAND_VALUE zmq_app C_STANDARD)
