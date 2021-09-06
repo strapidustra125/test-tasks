@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
     {
         cout << "." << endl;
 
-        rc = zmq_msg_recv(&receiveMessage, zmqRepSocket, 0);
+        rc = zmq_msg_recv(&receiveMessage, zmqRepSocket, ZMQ_DONTWAIT);
 
         if(rc == -1) cout << "New message error! rc = " << rc << "." << endl;
 
