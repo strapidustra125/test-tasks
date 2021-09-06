@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.0)
 
 
-# Характеристики проекта "zmq_app":
-project(zmq_app VERSION 1.0 LANGUAGES CXX)
+# Характеристики проекта "zmq_client":
+project(zmq_client VERSION 1.0 LANGUAGES CXX)
 
 
 # -std=c++11 - поддержка стандарта c++11
@@ -35,16 +35,16 @@ find_library(ZeroMQ_LIBRARY
 
 
 # Переменная для списка источников
-set(SOURCES Source/application.cpp)
+set(SOURCES_CLIENT Source/zmq_client.cpp)
 
-# Скомпилировать исполняемый файл "zmq_app":
-add_executable(zmq_app ${SOURCES})
+# Скомпилировать исполняемые файлы:
+add_executable(zmq_client ${SOURCES_CLIENT})
 
 
 ## add the include directory to our compile directives
-target_include_directories(zmq_app PUBLIC ${ZeroMQ_INCLUDE_DIR})
+target_include_directories(zmq_client PUBLIC ${ZeroMQ_INCLUDE_DIR})
 ## at the 0mq library to our link directive
-target_link_libraries(zmq_app PUBLIC ${ZeroMQ_LIBRARY})
+target_link_libraries(zmq_client PUBLIC ${ZeroMQ_LIBRARY})
 
 
 
