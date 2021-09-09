@@ -20,12 +20,17 @@ using namespace zmq;
 
 #define ZMQ_MESSAGE_SIZE        10
 
+#define ZMQ_CLIENT              0
+#define ZMQ_SERVER              1
+
 // Команды Клиента
 #define ZMQ_CMD_IDRequest       10
-#define ZMQ_CMD_KillAll         11
+#define ZMQ_CMD_moreID          11
+#define ZMQ_CMD_KillAll         12
 
 // Команды сервера
 #define ZMQ_CMD_ID              20
+#define ZMQ_CMD_IDVector        21
 
 
 
@@ -47,35 +52,16 @@ int genNewID(vector<int> vecID)
 
 }
 
-
-// Формирование строки для ZMQ сообщения
-string ZMQStringFormat(int cmd, int ID)
+void printIDVector(vector<int> vecID)
 {
-    return (ID == 0) ? to_string(cmd) + "0000": to_string(cmd) + to_string(ID);
-}
+    cout << endl << "Actieve applications ID:" << endl;
 
+    for(vector<int>::iterator it = vecID.begin(); it < vecID.end(); it++)
+    {
+        cout << "\t" << *it << endl;
+    }
 
-// Получение команды из сообщения
-int getCmdFromString(string ZMQMessageString)
-{
-    string cmd = "";
-    cmd += ZMQMessageString[0];
-    cmd += ZMQMessageString[1];
-
-    return stoi(cmd);
-}
-
-
-// Получение ID из сообщения
-int getIDFromString(string ZMQMessageString)
-{
-    string cmd = "";
-    cmd += ZMQMessageString[2];
-    cmd += ZMQMessageString[3];
-    cmd += ZMQMessageString[4];
-    cmd += ZMQMessageString[5];
-
-    return stoi(cmd);
+    cout << endl;
 }
 
 
@@ -127,7 +113,8 @@ int main(int argc, char *argv[])
 {
     cout << endl << "Starting ZMQ application." << endl << endl;
 
-    /* ======= Общие переменные ======= */
+
+    /* ============== Переменные ============== */
 
     // Создание контекста
     context_t zmqContext;
@@ -146,22 +133,15 @@ int main(int argc, char *argv[])
     string socketAddress = "tcp://127.0.0.1:4444";
 
     // Флаг первой запущенной программы
-    int serverFlag = 1;
+    int serverFlag = ZMQ_SERVER;
 
     // ID текущего экземпляра приложения
     int currentApplicationID = 0;
 
-
-    /* ======= Серверные переменные ======= */
-
+    // Вектор ID запущенных приложений
     vector <int> IDvector;
-    int newID = 0;
-
-    string messageString = "";                //
 
 
-
-    /* ======= Клиентские переменные ======= */
 
 
 
@@ -184,7 +164,7 @@ int main(int argc, char *argv[])
         // Если не получилось, значит сервер его уже открыл
 
         cout << "Extension..." << endl;
-        serverFlag = 0;
+        serverFlag = ZMQ_CLIENT;
 
         if(zmqReplaySocket.connected())
         {
@@ -208,13 +188,14 @@ int main(int argc, char *argv[])
 
         /* ===================== Серверная часть ===================== */
 
-    case true:
+    case ZMQ_SERVER:
 
         cout << "It's a server!" << endl << endl;
         cout << "Connection status: " << zmqReplaySocket.connected() << endl;
 
         currentApplicationID = genNewID(IDvector);
         IDvector.push_back(currentApplicationID);
+        printIDVector(IDvector);
 
         cout << "Application ID: " << currentApplicationID << endl << endl;
 
@@ -236,11 +217,27 @@ int main(int argc, char *argv[])
 
                 cout << "Got command \"ZMQ_CMD_IDRequest\": " << ZMQ_CMD_IDRequest << endl;
 
-                newID = genNewID(IDvector);
-                IDvector.push_back(newID);
+                IDvector.push_back(genNewID(IDvector));
 
                 zmqCommand.commandID = ZMQ_CMD_ID;
-                zmqCommand.applicationID = newID;
+                zmqCommand.applicationID = IDvector.back();
+
+                break;
+
+
+
+            case ZMQ_CMD_moreID:
+
+                cout << "Got command \"ZMQ_CMD_moreID\": " << ZMQ_CMD_moreID << endl;
+
+                if(zmqCommand.commandData < IDvector.size())
+                {
+                    zmqCommand.applicationID = IDvector[zmqCommand.commandData];
+                }
+                else zmqCommand.applicationID = 0;
+
+                zmqCommand.commandID = ZMQ_CMD_IDVector;
+
 
                 break;
 
@@ -273,7 +270,7 @@ int main(int argc, char *argv[])
 
         /* ===================== Клиентская часть ===================== */
 
-    case false:
+    case ZMQ_CLIENT:
 
         cout << "It's a client!" << endl << endl;
         cout << "Start connection status: " << zmqReplaySocket.connected() << endl;
@@ -281,6 +278,9 @@ int main(int argc, char *argv[])
         zmqRequestSocket.connect(socketAddress);
         cout << "Connection status: " << zmqReplaySocket.connected() << endl;
 
+
+
+        // Запрос ID
         zmqCommand.commandID = ZMQ_CMD_IDRequest;
         zmqCommand.applicationID = currentApplicationID;
 
@@ -291,14 +291,65 @@ int main(int argc, char *argv[])
 
 
 
+
+
+
         zmqRequestSocket.recv(&zmqMessage);
         zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
 
-        cout << "Client got: " << zmqCommand.formatString() << endl;
-
         currentApplicationID = zmqCommand.applicationID;
 
+
+
+
+        // Запрос вектора ID
+        zmqCommand.commandID = ZMQ_CMD_moreID;
+        zmqCommand.applicationID = currentApplicationID;
+        zmqCommand.commandData = IDvector.size();
+
+        zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
+        zmqRequestSocket.send(zmqMessage);
+
+        cout << "Client send: " << zmqCommand.formatString() << endl;
+
+
+
+
+
+
+        while(1)
+        {
+            zmqRequestSocket.recv(&zmqMessage);
+            zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
+
+            cout << "Client got: " << zmqCommand.formatString() << endl;
+
+            if(zmqCommand.applicationID == 0) break;
+            else IDvector.push_back(zmqCommand.applicationID);
+
+
+
+            // Запрос вектора ID
+            zmqCommand.commandID = ZMQ_CMD_moreID;
+            zmqCommand.applicationID = currentApplicationID;
+            zmqCommand.commandData = IDvector.size();
+
+            zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
+            zmqRequestSocket.send(zmqMessage);
+
+            cout << "Client send: " << zmqCommand.formatString() << endl;
+
+        }
+
         cout << "Application ID: " << currentApplicationID << endl << endl;
+
+        printIDVector(IDvector);
+
+
+
+
+
+
 
 
         break;
