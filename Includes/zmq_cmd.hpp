@@ -9,16 +9,17 @@
 
 #include <string>
 
+
 using namespace std;
 
 class zmq_cmd
 {
 public:
-    int commandID;
-    int applicationID;
-    int commandData;
+    unsigned int commandID;
+    unsigned int applicationID;
+    unsigned int commandData;
 
-    zmq_cmd(int cmdID=0, int appID=0, int cmdData=0)
+    zmq_cmd(unsigned int cmdID=0, unsigned int appID=0, unsigned int cmdData=0)
     {
         commandID = cmdID;
         applicationID = appID;
