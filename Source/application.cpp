@@ -19,11 +19,13 @@ using namespace zmq;
 /* ================================ Константы ================================ */
 
 #define DETAIL_LOG
+//#define DETAIL_EXCHANGE_LOG
+#define DETAIL_CONNECT_LOG
 
 #define ZMQ_MESSAGE_SIZE        10
 
-#define ZMQ_CLIENT              0
 #define ZMQ_SERVER              1
+#define ZMQ_CLIENT              2
 
 // Команды Клиента
 #define ZMQ_CMD_IDRequest       10
@@ -33,6 +35,40 @@ using namespace zmq;
 // Команды сервера
 #define ZMQ_CMD_ID              20
 #define ZMQ_CMD_IDVector        21
+
+
+/* ================================ Переменные ================================ */
+
+    // Создание контекста
+    context_t zmqContext;
+
+    // Сокеты для запроса и ответа
+    socket_t zmqRequestSocket(zmqContext, socket_type::req);
+    socket_t zmqReplaySocket(zmqContext, socket_type::rep);
+
+    // Сообщение для отправки по ZeroMQ
+    message_t zmqMessage(ZMQ_MESSAGE_SIZE);
+
+    // Команда для обмена между клиентами и сервером
+    zmq_cmd zmqCommand(0, 0, 0);
+
+    // Адрес сокета для подключения
+    string socketAddress = "tcp://127.0.0.1:4444";
+
+
+
+    // Флаг первой запущенной программы
+    int serverFlag = 0;
+
+    // ID текущего экземпляра приложения
+    int currentApplicationID = 0;
+
+    // ID сервера
+    int serverID = 0;
+
+    // Вектор ID запущенных приложений
+    vector <int> IDvector;
+
 
 
 
@@ -53,6 +89,7 @@ int genNewID(vector<int> vecID)
     }
 
 }
+
 
 void printIDVector(vector<int> vecID)
 {
@@ -106,7 +143,17 @@ string getStringFromZMQMessage(const zmq::message_t & aMessage)
 }
 
 
+// Обнуление значения переменных для нового сервера
+void initNewServer()
+{
+    // Удаляем ID сервера из вектора
+    vector<int>::iterator serverIDIter = find(IDvector.begin(), IDvector.end(), serverID);
+    if(serverIDIter != IDvector.end()) IDvector.erase(serverIDIter);
 
+    serverFlag = ZMQ_SERVER;
+
+    serverID = currentApplicationID;
+}
 
 
 
@@ -116,42 +163,9 @@ string getStringFromZMQMessage(const zmq::message_t & aMessage)
 
 int main(int argc, char *argv[])
 {
-    cout << endl << "Starting ZMQ application." << endl << endl;
-
-
-    /* ============== Переменные ============== */
-
-    // Создание контекста
-    context_t zmqContext;
-
-    // Сокеты для запроса и ответа
-    socket_t zmqRequestSocket(zmqContext, socket_type::req);
-    socket_t zmqReplaySocket(zmqContext, socket_type::rep);
-
-    // Сообщение для отправки по ZeroMQ
-    message_t zmqMessage(ZMQ_MESSAGE_SIZE);
-
-    // Команда для обмена между клиентами и сервером
-    zmq_cmd zmqCommand(0, 0, 0);
-
-    // Адрес сокета для подключения
-    string socketAddress = "tcp://127.0.0.1:4444";
-
-    // Флаг первой запущенной программы
-    int serverFlag = ZMQ_SERVER;
-
-    // ID текущего экземпляра приложения
-    int currentApplicationID = 0;
-
-    // Вектор ID запущенных приложений
-    vector <int> IDvector;
-
-
-
-
+    cout << endl << "Starting ZMQ application..." << endl << endl;
 
     srand(time(0)); // Стартовое число ГПСЧ
-
 
 
 
@@ -161,211 +175,194 @@ int main(int argc, char *argv[])
     try
     {
         // Пытаемся открыть сокет
+
+        #ifdef DETAIL_CONNECT_LOG
+            cout << "Try to bind a socket..." << endl;
+        #endif // DETAIL_CONNECT_LOG
+
         zmqReplaySocket.bind(socketAddress);
+
+        #ifdef DETAIL_CONNECT_LOG
+            cout << "Success!" << endl;
+        #endif // DETAIL_CONNECT_LOG
+
+        serverFlag = ZMQ_SERVER;
     }
     catch(zmq::error_t err)
     {
         // Если не получилось, значит сервер его уже открыл
 
-        #ifdef DETAIL_LOG
-            cout << "Extension..." << endl;
-        #endif // DETAIL_LOG
+        #ifdef DETAIL_CONNECT_LOG
+            cout << "Extension: \"" << err.what() << "\"." << endl;
+        #endif // DETAIL_CONNECT_LOG
 
         serverFlag = ZMQ_CLIENT;
 
-        if(zmqReplaySocket.connected())
-        {
+        zmqRequestSocket.connect(socketAddress);
 
-            #ifdef DETAIL_LOG
-                cout << "Connection status: " << zmqReplaySocket.connected() << endl;
-                cout << "It's connected to \"" << socketAddress << "\"." << endl;
-                cout << "Close socket..." << endl << endl;
-            #endif // DETAIL_LOG
+        #ifdef DETAIL_CONNECT_LOG
+            cout << "Connection status: " <<
+            (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
+            << " with \"" << socketAddress << "\"" << endl;
+            //cout << "Close socket..." << endl << endl;
+        #endif // DETAIL_CONNECT_LOG
 
-            zmqReplaySocket.close();
+        //zmqReplaySocket.close();
 
-        }
+
     }
 
 
 
+/* ================== Рабочий цикл приложения ================== */
 
-
-
-
-    /* ======= Выбор фрагмента кода: клиент или сервер ======= */
-
-    switch(serverFlag)
+    while(1)
     {
 
-/* ===================== Серверная часть ===================== */
+        /* ======= Выбор фрагмента кода: клиент или сервер ======= */
 
-    case ZMQ_SERVER:
-
-        #ifdef DETAIL_LOG
-            cout << "It's a server!" << endl << endl;
-            cout << "Connection status: " <<
-                (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
-                << " with \"" << socketAddress << "\"" << endl << endl;
-        #endif // DETAIL_LOG
-
-        currentApplicationID = genNewID(IDvector);
-        IDvector.push_back(currentApplicationID);
-
-
-        cout << "Application ID: " << currentApplicationID << endl;
-
-        printIDVector(IDvector);
-
-        while(1)
+        switch(serverFlag)
         {
-            zmqReplaySocket.recv(&zmqMessage);
-            zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
 
-            switch (zmqCommand.commandID)
+    /* ===================== Серверная часть ===================== */
+
+        case ZMQ_SERVER:
+
+            #ifdef DETAIL_LOG
+                cout << endl << "====>  It's a server!" << endl << endl;
+                cout << "Connection status: " <<
+                    (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
+                    << " with \"" << socketAddress << "\"" << endl << endl;
+            #endif // DETAIL_LOG
+
+            if(IDvector.empty())
             {
+                currentApplicationID = genNewID(IDvector);
+                serverID = currentApplicationID;
+                IDvector.push_back(serverID);
+            }
 
+            cout << "Application ID: " << currentApplicationID << endl;
+
+            printIDVector(IDvector);
+
+            while(1)
+            {
+                zmqReplaySocket.recv(&zmqMessage);
+                zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
+
+                switch (zmqCommand.commandID)
+                {
+
+
+            /* ======= Запрос ID ======= */
+
+                case ZMQ_CMD_IDRequest:
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << "Got command \"ZMQ_CMD_IDRequest\": " << ZMQ_CMD_IDRequest << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    IDvector.push_back(genNewID(IDvector));
+
+                    zmqCommand.commandID = ZMQ_CMD_ID;
+                    zmqCommand.applicationID = currentApplicationID;
+                    zmqCommand.commandData = IDvector.back();
+
+                    break;
+
+
+            /* ======= Запрос следующего ID вектора ======= */
+
+                case ZMQ_CMD_moreID:
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << "Got command \"ZMQ_CMD_moreID\": " << ZMQ_CMD_moreID << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    if(zmqCommand.commandData < IDvector.size())
+                    {
+                        zmqCommand.applicationID = IDvector[zmqCommand.commandData];
+                        zmqCommand.commandData = currentApplicationID;
+                    }
+                    else zmqCommand.applicationID = 0;
+
+                    // Потому что для приема и передачи один экземпляр класса zmq_cmd
+                    swap(zmqCommand.applicationID, zmqCommand.commandData);
+
+                    zmqCommand.commandID = ZMQ_CMD_IDVector;
+
+                    break;
+
+
+            /* ======= Выключить все приложения ======= */
+
+                case ZMQ_CMD_KillAll:
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << "Got command \"ZMQ_CMD_KillAll\": " << ZMQ_CMD_KillAll << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    break;
+
+                default:
+                    break;
+                }
+
+                zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
+                zmqReplaySocket.send(zmqMessage);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << "Server send message: " << zmqCommand.formatString() << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+            }
+
+            break;
+
+
+
+
+    /* ===================== Клиентская часть ===================== */
+
+        case ZMQ_CLIENT:
+
+            #ifdef DETAIL_LOG
+                cout << endl << "====>  It's a client!" << endl << endl;
+            #endif // DETAIL_LOG
 
         /* ======= Запрос ID ======= */
 
-            case ZMQ_CMD_IDRequest:
+            // Запрос ID у сервера
 
-                #ifdef DETAIL_LOG
-                    cout << "Got command \"ZMQ_CMD_IDRequest\": " << ZMQ_CMD_IDRequest << endl;
-                #endif // DETAIL_LOG
-
-                IDvector.push_back(genNewID(IDvector));
-
-                zmqCommand.commandID = ZMQ_CMD_ID;
-                zmqCommand.applicationID = IDvector.back();
-
-                break;
-
-
-        /* ======= Запрос следующего ID вектора ======= */
-
-            case ZMQ_CMD_moreID:
-
-                #ifdef DETAIL_LOG
-                    cout << "Got command \"ZMQ_CMD_moreID\": " << ZMQ_CMD_moreID << endl;
-                #endif // DETAIL_LOG
-
-                if(zmqCommand.commandData < IDvector.size())
-                {
-                    zmqCommand.applicationID = IDvector[zmqCommand.commandData];
-                }
-                else zmqCommand.applicationID = 0;
-
-                zmqCommand.commandID = ZMQ_CMD_IDVector;
-
-                break;
-
-
-        /* ======= Выключить все приложения ======= */
-
-            case ZMQ_CMD_KillAll:
-
-                #ifdef DETAIL_LOG
-                    cout << "Got command \"ZMQ_CMD_KillAll\": " << ZMQ_CMD_KillAll << endl;
-                #endif // DETAIL_LOG
-
-                break;
-
-            default:
-                break;
-            }
+            zmqCommand.commandID = ZMQ_CMD_IDRequest;
+            zmqCommand.applicationID = currentApplicationID;
 
             zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
-            zmqReplaySocket.send(zmqMessage);
+            zmqRequestSocket.send(zmqMessage);
 
-            #ifdef DETAIL_LOG
-                cout << "Server send message: " << zmqCommand.formatString() << endl;
-            #endif // DETAIL_LOG
-        }
-
-        break;
+            #ifdef DETAIL_EXCHANGE_LOG
+                cout << "Client send message: " << zmqCommand.formatString() << endl;
+            #endif // DETAIL_EXCHANGE_LOG
 
 
-
-
-/* ===================== Клиентская часть ===================== */
-
-    case ZMQ_CLIENT:
-
-        #ifdef DETAIL_LOG
-            cout << "It's a client!" << endl << endl;
-            cout << "Connection status: " <<
-                (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
-                << " with \"" << socketAddress << "\"" << endl << endl;
-            cout << "Trying to connect..." << endl;
-        #endif // DETAIL_LOG
-
-        zmqRequestSocket.connect(socketAddress);
-
-        #ifdef DETAIL_LOG
-            cout << "New connection status: " <<
-                (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
-                << " with \"" << socketAddress << "\"" << endl << endl;
-        #endif // DETAIL_LOG
-
-
-
-    /* ======= Запрос ID ======= */
-
-        // Запрос ID у сервера
-
-        zmqCommand.commandID = ZMQ_CMD_IDRequest;
-        zmqCommand.applicationID = currentApplicationID;
-
-        zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
-        zmqRequestSocket.send(zmqMessage);
-
-        #ifdef DETAIL_LOG
-            cout << "Client send message: " << zmqCommand.formatString() << endl;
-        #endif // DETAIL_LOG
-
-
-        // Получение ID от сервера
-
-        zmqRequestSocket.recv(&zmqMessage);
-        zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
-
-        currentApplicationID = zmqCommand.applicationID;
-
-        cout << "Application ID: " << currentApplicationID << endl;
-
-
-
-    /* ======= Запрос вектора ID активных приложений ======= */
-
-        // Запрос очередного ID у сервера
-
-        zmqCommand.commandID = ZMQ_CMD_moreID;
-        zmqCommand.applicationID = currentApplicationID;
-        zmqCommand.commandData = IDvector.size();
-
-        zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
-        zmqRequestSocket.send(zmqMessage);
-
-        #ifdef DETAIL_LOG
-            cout << "Client send message: " << zmqCommand.formatString() << endl;
-        #endif // DETAIL_LOG
-
-        while(1)
-        {
-            // Получение очередного ID от сервера
+            // Получение ID от сервера
 
             zmqRequestSocket.recv(&zmqMessage);
             zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
 
+            currentApplicationID = zmqCommand.commandData;
+            serverID = zmqCommand.applicationID;
+
+            cout << "Application ID: " << currentApplicationID << endl;
+
             #ifdef DETAIL_LOG
-                cout << "Client got message: " << zmqCommand.formatString() << endl;
-                cout << "New ID: " << zmqCommand.applicationID << endl;
+                cout << "Server ID: " << serverID << endl;
             #endif // DETAIL_LOG
 
-            if(zmqCommand.applicationID == 0) break;
-            else IDvector.push_back(zmqCommand.applicationID);
 
+
+
+        /* ======= Запрос вектора ID активных приложений ======= */
 
             // Запрос очередного ID у сервера
 
@@ -376,29 +373,99 @@ int main(int argc, char *argv[])
             zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
             zmqRequestSocket.send(zmqMessage);
 
-            #ifdef DETAIL_LOG
+            #ifdef DETAIL_EXCHANGE_LOG
                 cout << "Client send message: " << zmqCommand.formatString() << endl;
-            #endif // DETAIL_LOG
+            #endif // DETAIL_EXCHANGE_LOG
+
+            while(1)
+            {
+                // Получение очередного ID от сервера
+
+                zmqRequestSocket.recv(&zmqMessage);
+                zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << "Client got message: " << zmqCommand.formatString() << endl;
+                    cout << "New ID: " << zmqCommand.commandData << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+                if(zmqCommand.commandData == 0) break;
+                else IDvector.push_back(zmqCommand.commandData);
+
+
+                // Запрос очередного ID у сервера
+
+                zmqCommand.commandID = ZMQ_CMD_moreID;
+                zmqCommand.applicationID = currentApplicationID;
+                zmqCommand.commandData = IDvector.size();
+
+                zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
+                zmqRequestSocket.send(zmqMessage);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << "Client send message: " << zmqCommand.formatString() << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+            }
+
+            printIDVector(IDvector);
+
+
+
+        /* ======= Рабочий цикл клиента ======= */
+
+            while (1)
+            {
+                #ifdef DETAIL_LOG
+                    cout << "---------------------- New client iter ---------------------" << endl << endl;
+                #endif // DETAIL_LOG
+
+                try
+                {
+                    #ifdef DETAIL_CONNECT_LOG
+                        cout << "Try to rebind a socket..." << endl;
+                    #endif // DETAIL_CONNECT_LOG
+
+                    zmqReplaySocket.bind(socketAddress);
+
+                    #ifdef DETAIL_CONNECT_LOG
+                        cout << "Success..." << "  Server was turned off!" << endl;
+                        cout << "Init a new server..." << endl;
+                    #endif // DETAIL_CONNECT_LOG
+
+                    initNewServer();
+
+                    break;
+                }
+                catch(zmq::error_t err)
+                {
+                    #ifdef DETAIL_CONNECT_LOG
+                        cout << "Extension: \"" << err.what() << "\"." << endl;
+                        cout << "Server is active!" << endl;
+                    #endif // DETAIL_CONNECT_LOG
+                }
+
+
+
+
+
+                //zmqReplaySocket.close();
+                //zmqReplaySocket.unbind(socketAddress);
+
+                sleep(2);
+            }
+
+
+
+
+
+
+
+
+            break;
+
+        default:
+            break;
         }
-
-        printIDVector(IDvector);
-
-
-
-
-
-
-        break;
-
-    default:
-        break;
-    }
-
-
-
-    while(1)
-    {
-
     }
 
 
