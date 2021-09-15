@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+message ZMQ_cmd
+{
+    uint32 commandID = 1;
+    uint32 applicationID = 2;
+    uint32 commandData = 3;
+}

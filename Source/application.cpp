@@ -9,6 +9,8 @@
 #include <ctime> 	// Для функции time()
 #include <algorithm>
 
+#include "../Includes/command.pb.h"
+
 #include "zmq.hpp"
 #include "zmq_cmd.hpp"
 
