@@ -161,7 +161,7 @@ void initNewServer()
 /* ============================= Основная функция ============================ */
 
 
-int main(int argc, char *argv[])
+int main(/*int argc, char *argv[]*/)
 {
     cout << endl << "Starting ZMQ application..." << endl << endl;
 
