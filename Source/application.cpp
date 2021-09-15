@@ -21,7 +21,7 @@ using namespace zmq;
 /* ================================ Константы ================================ */
 
 #define DETAIL_LOG
-//#define DETAIL_EXCHANGE_LOG
+#define DETAIL_EXCHANGE_LOG
 #define DETAIL_CONNECT_LOG
 
 #define ZMQ_MESSAGE_SIZE        10
@@ -74,6 +74,11 @@ using namespace zmq;
 
 
 
+    ZMQ_cmd ZMQCommand;
+
+
+
+
 /* ========================= Вспомогательные функции ========================= */
 
 // Новый случайный ID
@@ -89,7 +94,6 @@ int genNewID(vector<int> vecID)
             return newID;
         }
     }
-
 }
 
 
@@ -251,6 +255,18 @@ int main(/*int argc, char *argv[]*/)
             while(1)
             {
                 zmqReplaySocket.recv(&zmqMessage);
+
+                string s;
+                ZMQCommand.ParseFromString(getStringFromZMQMessage(zmqMessage));
+                ZMQCommand.SerializePartialToString(&s);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << "Protobuf: " << s << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+
+                //ZMQCommand.SerializePartialToArray();
+
                 zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
 
                 switch (zmqCommand.commandID)
