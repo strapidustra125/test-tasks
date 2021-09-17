@@ -34,10 +34,12 @@ using namespace zmq;
 #define ZMQ_CMD_IDRequest       10
 #define ZMQ_CMD_moreID          11
 #define ZMQ_CMD_KillAll         12
+#define ZMQ_CMD_KillCheck       13
 
 // Команды сервера
 #define ZMQ_CMD_ID              20
 #define ZMQ_CMD_IDVector        21
+#define ZMQ_CMD_Kill            22
 
 
 /* ================================ Переменные ================================ */
@@ -53,7 +55,7 @@ using namespace zmq;
     message_t zmqMessage(ZMQ_MESSAGE_SIZE);
 
     // Команда для обмена между клиентами и сервером
-    zmq_cmd zmqCommand(0, 0, 0);
+    ZMQ_cmd ZMQCommand;
 
     // Адрес сокета для подключения
     string socketAddress = "tcp://127.0.0.1:4444";
@@ -61,7 +63,7 @@ using namespace zmq;
 
 
     // Флаг первой запущенной программы
-    int serverFlag = 0;
+    int flag_isServer = 0;
 
     // ID текущего экземпляра приложения
     int currentApplicationID = 0;
@@ -72,11 +74,12 @@ using namespace zmq;
     // Вектор ID запущенных приложений
     vector <int> IDvector;
 
+    // Флаг выключения всех команд
+    bool flag_killAll = false;
 
 
-    int temp;
 
-    ZMQ_cmd ZMQCommand;
+
 
 
 
@@ -117,24 +120,70 @@ void initNewServer()
     vector<int>::iterator serverIDIter = find(IDvector.begin(), IDvector.end(), serverID);
     if(serverIDIter != IDvector.end()) IDvector.erase(serverIDIter);
 
-    serverFlag = ZMQ_SERVER;
+    flag_isServer = ZMQ_SERVER;
 
     serverID = currentApplicationID;
 }
 
 
+void checkArguments(int argNumber, char *argList[])
+{
+    string key = "";
+
+    #ifdef DETAIL_LOG
+        cout << endl << "Application parametrs number: " << argNumber << endl;
+        cout << endl << "Application parametrs list: " << endl;
+
+        for(int i = 0; i < argNumber; i++)
+        {
+            cout << "\t" << i << ": " << argList[i] << endl;
+        }
+
+        cout << endl;
+    #endif // DETAIL_LOG
+
+    // Чтобы гарантировать корректность посимвольного сравнения
+    key = argList[2];
+
+    cout << "key: " << key << endl;
+
+    // Если указан только один ключ
+    if(argNumber <= 2)
+    {
+        // Закрыть все активные приложения
+       if((key == "-k") || (key == "--kill"))
+        {
+            cout << "kill" << endl;
+        }
+
+        // Вывод справки
+        if(key == "-h" || key == "--help")
+        {
+            cout << "help" << endl;
+        }
+    }
+    else
+    {
+        cout << endl << "Error: Too much params!" << endl;
+        cout << "Exit." << endl << endl;
+
+        exit(0);
+    }
+}
 
 
 /* ============================= Основная функция ============================ */
 
 
-int main(/*int argc, char *argv[]*/)
+int main(int argc, char *argv[])
 {
     cout << endl << "Starting ZMQ application..." << endl << endl;
 
     srand(time(0)); // Стартовое число ГПСЧ
 
+    int temp;
 
+    checkArguments(argc, argv);
 
     /* ======= Конфигурация обмена сообщениями ======= */
 
@@ -153,7 +202,7 @@ int main(/*int argc, char *argv[]*/)
             cout << "Success!" << endl;
         #endif // DETAIL_CONNECT_LOG
 
-        serverFlag = ZMQ_SERVER;
+        flag_isServer = ZMQ_SERVER;
     }
     catch(zmq::error_t err)
     {
@@ -163,7 +212,7 @@ int main(/*int argc, char *argv[]*/)
             cout << "Extension: \"" << err.what() << "\"." << endl;
         #endif // DETAIL_CONNECT_LOG
 
-        serverFlag = ZMQ_CLIENT;
+        flag_isServer = ZMQ_CLIENT;
 
         zmqRequestSocket.connect(socketAddress);
 
@@ -173,10 +222,6 @@ int main(/*int argc, char *argv[]*/)
             << " with \"" << socketAddress << "\"" << endl;
             //cout << "Close socket..." << endl << endl;
         #endif // DETAIL_CONNECT_LOG
-
-        //zmqReplaySocket.close();
-
-
     }
 
 
@@ -187,7 +232,7 @@ int main(/*int argc, char *argv[]*/)
 
         /* ======= Выбор фрагмента кода: клиент или сервер ======= */
 
-        switch(serverFlag)
+        switch(flag_isServer)
         {
 
     /* ===================== Серверная часть ===================== */
@@ -284,6 +329,30 @@ int main(/*int argc, char *argv[]*/)
                     #endif // DETAIL_EXCHANGE_LOG
 
                     break;
+
+
+            /* ======= Проверка необходимости выключения ======= */
+
+                case ZMQ_CMD_KillCheck:
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << "Got command \"ZMQ_CMD_KillCheck\": " << ZMQ_CMD_KillCheck << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    if(1)
+                    {
+                        ZMQCommand.set_commandid(ZMQ_CMD_Kill);
+                        ZMQCommand.set_applicationid(currentApplicationID);
+                        ZMQCommand.set_commanddata(0);
+                    }
+                    else
+                    {
+
+                    }
+
+
+                    break;
+
 
                 default:
                     break;
@@ -453,10 +522,46 @@ int main(/*int argc, char *argv[]*/)
 
 
 
+            /* ======= Отключение по ключу '-k' ======= */
+
+                // Запрос
+
+                ZMQCommand.set_commandid(ZMQ_CMD_KillCheck);
+                ZMQCommand.set_applicationid(currentApplicationID);
+                ZMQCommand.set_commanddata(0);
+
+                zmqMessage.rebuild(ZMQCommand.SerializeAsString().c_str(), ZMQ_MESSAGE_SIZE);
+                zmqRequestSocket.send(zmqMessage);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << endl << "Protobuf replied struct:" << endl;
+                    cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                #endif // DETAIL_EXCHANGE_LOG
 
 
-                //zmqReplaySocket.close();
-                //zmqReplaySocket.unbind(socketAddress);
+                // Ответ
+
+                zmqRequestSocket.recv(&zmqMessage);
+                ZMQCommand.ParseFromArray(zmqMessage.data(), zmqMessage.size());
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << endl << "Protobuf recieved struct:" << endl;
+                    cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+                if(ZMQCommand.commanddata() == 1)
+                {
+                    // Пришла команда выключения
+
+                    cout << endl << "Closing application." << endl << endl;
+                }
+
+
+
 
                 sleep(2);
             }
