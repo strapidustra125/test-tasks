@@ -74,9 +74,9 @@ using namespace zmq;
 
 
 
+    string s;
 
     ZMQ_cmd ZMQCommand;
-
 
 
 
@@ -217,7 +217,6 @@ int main(/*int argc, char *argv[]*/)
     }
 
 
-
 /* ================== Рабочий цикл приложения ================== */
 
     while(1)
@@ -254,12 +253,16 @@ int main(/*int argc, char *argv[]*/)
             {
                 zmqReplaySocket.recv(&zmqMessage);
 
-                string s;
-                ZMQCommand.ParseFromString(getStringFromZMQMessage(zmqMessage));
-                ZMQCommand.SerializePartialToString(&s);
+                ZMQCommand.ParseFromArray(zmqMessage.data(), zmqMessage.size());
+
+                // s = getStringFromZMQMessage(zmqMessage);
+
+                // cout << "\tProtobuf: |" << s << "|" << endl;
+
+                // ZMQCommand.ParseFromString(s);
 
                 #ifdef DETAIL_EXCHANGE_LOG
-                    cout << "\tProtobuf: " << s << endl;
+
                     cout << "\t\tcommandID: " << ZMQCommand.commandid() << endl;
                     cout << "\t\tcommandData: " << ZMQCommand.commanddata() << endl;
                     cout << "\t\tapplicationID: " << ZMQCommand.applicationid() << endl;
@@ -353,24 +356,71 @@ int main(/*int argc, char *argv[]*/)
 
             // Запрос ID у сервера
 
-            zmqCommand.commandID = ZMQ_CMD_IDRequest;
-            zmqCommand.applicationID = currentApplicationID;
-
-            zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
-            zmqRequestSocket.send(zmqMessage);
+            ZMQCommand.set_applicationid(currentApplicationID);
+            ZMQCommand.set_commandid(ZMQ_CMD_IDRequest);
+            ZMQCommand.set_commanddata(0);
 
             #ifdef DETAIL_EXCHANGE_LOG
-                cout << "Client send message: " << zmqCommand.formatString() << endl;
+                cout << "\t\tcommandID: " << ZMQCommand.commandid() << endl;
+                cout << "\t\tcommandData: " << ZMQCommand.commanddata() << endl;
+                cout << "\t\tapplicationID: " << ZMQCommand.applicationid() << endl;
             #endif // DETAIL_EXCHANGE_LOG
+
+            s = "123";
+            //if(!ZMQCommand.SerializeAsString(&s)) cout << "ERROR" << endl;
+
+            s = ZMQCommand.SerializePartialAsString();
+
+            cout << "-" << endl;
+            for(int i = 0; i < s.length(); i++) cout << s[i] << endl;
+            cout << "-" << endl;
+
+            cout << "Protobuf: |" << s << "|" << endl;
+
+            zmqMessage.rebuild(s.c_str(), ZMQCommand.ByteSizeLong());
+            zmqRequestSocket.send(zmqMessage);
+
+
+
+
+
+            // zmqCommand.commandID = ZMQ_CMD_IDRequest;
+            // zmqCommand.applicationID = currentApplicationID;
+
+            // zmqMessage.rebuild(zmqCommand.formatString().c_str(), ZMQ_MESSAGE_SIZE);
+            // zmqRequestSocket.send(zmqMessage);
+
+            // #ifdef DETAIL_EXCHANGE_LOG
+            //     cout << "Client send message: " << zmqCommand.formatString() << endl;
+            // #endif // DETAIL_EXCHANGE_LOG
 
 
             // Получение ID от сервера
 
-            zmqRequestSocket.recv(&zmqMessage);
-            zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
 
-            currentApplicationID = zmqCommand.commandData;
-            serverID = zmqCommand.applicationID;
+            zmqRequestSocket.recv(&zmqMessage);
+
+            ZMQCommand.ParseFromString(getStringFromZMQMessage(zmqMessage));
+
+            #ifdef DETAIL_EXCHANGE_LOG
+                cout << "\tProtobuf: " << endl;
+                cout << "\t\tcommandID: " << ZMQCommand.commandid() << endl;
+                cout << "\t\tcommandData: " << ZMQCommand.commanddata() << endl;
+                cout << "\t\tapplicationID: " << ZMQCommand.applicationid() << endl;
+            #endif // DETAIL_EXCHANGE_LOG
+
+            currentApplicationID = ZMQCommand.commanddata();
+
+            serverID = ZMQCommand.applicationid();
+
+
+
+            // zmqRequestSocket.recv(&zmqMessage);
+
+            // zmqCommand.readString(getStringFromZMQMessage(zmqMessage));
+
+            // currentApplicationID = zmqCommand.commandData;
+            // serverID = zmqCommand.applicationID;
 
             cout << "Application ID: " << currentApplicationID << endl;
 
@@ -483,6 +533,11 @@ int main(/*int argc, char *argv[]*/)
             break;
 
         default:
+
+            cout << "====> Error: Unknown device type!" << endl;
+
+            return 0;
+
             break;
         }
     }
