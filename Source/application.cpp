@@ -10,9 +10,10 @@
 #include <algorithm>
 
 #include "../Includes/command.pb.h"
+#include "../Includes/zmq_cmd.hpp"
 
 #include "zmq.hpp"
-#include "zmq_cmd.hpp"
+
 
 using namespace std;
 using namespace zmq;
@@ -104,12 +105,9 @@ void printIDVector(vector<int> vecID)
     for(vector<int>::iterator it = vecID.begin(); it < vecID.end(); it++)
     {
         cout << "\t" << *it << endl;
-        //cout << ".";
     }
 
     cout << endl;
-
-    //cout << ".";
 }
 
 
@@ -261,7 +259,10 @@ int main(/*int argc, char *argv[]*/)
                 ZMQCommand.SerializePartialToString(&s);
 
                 #ifdef DETAIL_EXCHANGE_LOG
-                    cout << "Protobuf: " << s << endl;
+                    cout << "\tProtobuf: " << s << endl;
+                    cout << "\t\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\t\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\t\tapplicationID: " << ZMQCommand.applicationid() << endl;
                 #endif // DETAIL_EXCHANGE_LOG
 
 
