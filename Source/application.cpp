@@ -74,6 +74,8 @@ using namespace zmq;
     // Вектор ID запущенных приложений
     vector <int> IDvector;
 
+    vector <int>::iterator it;
+
     // Флаг выключения всех команд
     bool flag_killAll = false;
 
@@ -139,6 +141,8 @@ void checkArguments(int argNumber, char *argList[])
 
         cout << endl;
     #endif // DETAIL_LOG
+
+    if(argNumber == 1) return;
 
     // Чтобы гарантировать корректность посимвольного сравнения
     string key(argList[1]);
@@ -252,6 +256,9 @@ int main(int argc, char *argv[])
 
         case ZMQ_SERVER:
 
+
+        /* ======= Инициализация сервера ======= */
+
             #ifdef DETAIL_LOG
                 cout << endl << "====>  It's a server!" << endl << endl;
                 cout << "Connection status: " <<
@@ -278,6 +285,9 @@ int main(int argc, char *argv[])
             cout << "Application ID: " << currentApplicationID << endl;
 
             printIDVector(IDvector);
+
+
+        /* ======= Рабочий цикл сервера ======= */
 
             while(1)
             {
@@ -350,6 +360,12 @@ int main(int argc, char *argv[])
                         cout << "Got command \"ZMQ_CMD_KillAll\": " << ZMQ_CMD_KillAll << endl;
                     #endif // DETAIL_EXCHANGE_LOG
 
+                    flag_killAll = true;
+
+                    ZMQCommand.set_commandid(ZMQ_CMD_Kill);
+                    ZMQCommand.set_applicationid(currentApplicationID);
+                    ZMQCommand.set_commanddata(0);
+
                     break;
 
 
@@ -360,18 +376,27 @@ int main(int argc, char *argv[])
                     #ifdef DETAIL_EXCHANGE_LOG
                         cout << "Got command \"ZMQ_CMD_KillCheck\": " << ZMQ_CMD_KillCheck << endl;
                     #endif // DETAIL_EXCHANGE_LOG
-
-                    if(1)
+                    
+                    if(flag_killAll)
                     {
-                        ZMQCommand.set_commandid(ZMQ_CMD_Kill);
-                        ZMQCommand.set_applicationid(currentApplicationID);
-                        ZMQCommand.set_commanddata(0);
+                        ZMQCommand.set_commanddata(1);
+
+                        it = find(IDvector.begin(), IDvector.end(), ZMQCommand.applicationid());
+
+                        if(it != IDvector.end()) IDvector.erase(it);
+                        else cout << "Find ERROR!" << endl;                            
+                        
+                        
                     }
                     else
                     {
-
+                        ZMQCommand.set_commanddata(0);
                     }
 
+                    ZMQCommand.set_applicationid(currentApplicationID);
+                    ZMQCommand.set_commandid(ZMQ_CMD_Kill);
+
+                    
 
                     break;
 
@@ -389,6 +414,14 @@ int main(int argc, char *argv[])
                     cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
                     cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
                 #endif // DETAIL_EXCHANGE_LOG
+
+                if(flag_killAll && IDvector.size() == 1)
+                {
+                    cout << endl << "\"Kill All\" command was found." << endl;
+                    cout << "Closing application." << endl << endl;
+
+                    exit(0);
+                }
             }
 
             break;
@@ -400,9 +433,58 @@ int main(int argc, char *argv[])
 
         case ZMQ_CLIENT:
 
+
+        /* ======= Инициализация клиента ======= */
+
             #ifdef DETAIL_LOG
                 cout << endl << "====>  It's a client!" << endl << endl;
             #endif // DETAIL_LOG
+
+
+        /* ======= Закрыть все приложения ======= */
+
+            if(flag_killAll)
+            {
+                // Запрос на выключение
+
+                ZMQCommand.set_applicationid(currentApplicationID);
+                ZMQCommand.set_commandid(ZMQ_CMD_KillAll);
+                ZMQCommand.set_commanddata(0);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << endl << "Protobuf replied struct:" << endl;
+                    cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+                zmqMessage.rebuild(ZMQCommand.SerializeAsString().c_str(), ZMQ_MESSAGE_SIZE);
+                zmqRequestSocket.send(zmqMessage);
+
+
+                // Ответ
+
+                zmqRequestSocket.recv(&zmqMessage);
+
+                ZMQCommand.ParseFromArray(zmqMessage.data(), zmqMessage.size());
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << endl << "Protobuf recieved struct:" << endl;
+                    cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+                if(ZMQCommand.commandid() == ZMQ_CMD_Kill)
+                {
+                    // Пришла команда выключения
+
+                    cout << endl << "\"Kill All\" command was found." << endl;
+                    cout << "Closing application." << endl << endl;
+
+                    exit(0);
+                }
+            }
 
         /* ======= Запрос ID ======= */
 
@@ -581,6 +663,8 @@ int main(int argc, char *argv[])
 
                     cout << endl << "\"Kill All\" command was found." << endl;
                     cout << "Closing application." << endl << endl;
+
+                    exit(0);
                 }
 
 
