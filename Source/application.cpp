@@ -128,8 +128,6 @@ void initNewServer()
 
 void checkArguments(int argNumber, char *argList[])
 {
-    string key = "";
-
     #ifdef DETAIL_LOG
         cout << endl << "Application parametrs number: " << argNumber << endl;
         cout << endl << "Application parametrs list: " << endl;
@@ -143,24 +141,39 @@ void checkArguments(int argNumber, char *argList[])
     #endif // DETAIL_LOG
 
     // Чтобы гарантировать корректность посимвольного сравнения
-    key = argList[2];
-
-    cout << "key: " << key << endl;
+    string key(argList[1]);
 
     // Если указан только один ключ
     if(argNumber <= 2)
     {
-        // Закрыть все активные приложения
-       if((key == "-k") || (key == "--kill"))
+        // Проверка значения ключа
+        if((key == "-k") || (key == "--kill"))
         {
-            cout << "kill" << endl;
-        }
+            // Закрыть все активные приложения
 
-        // Вывод справки
-        if(key == "-h" || key == "--help")
-        {
-            cout << "help" << endl;
+            cout << "kill" << endl;
+
+            flag_killAll = true;
         }
+        else if(key == "-h" || key == "--help")
+        {
+            // Вывести справку
+
+            cout << "help" << endl;
+
+            exit(0);
+        }
+        else
+        {
+            cout << endl <<  "Error: Invalid parametr value!" << endl;
+            cout << "Exit." << endl << endl;
+
+            exit(0);
+        }
+        
+
+        
+
     }
     else
     {
@@ -245,6 +258,15 @@ int main(int argc, char *argv[])
                     (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
                     << " with \"" << socketAddress << "\"" << endl << endl;
             #endif // DETAIL_LOG
+
+            // Если первое приложение запущено с ключом выключения всех
+            if(flag_killAll)
+            {
+                cout << endl << "\"Kill All\" command was found." << endl;
+                cout << "Closing application." << endl << endl;
+
+                exit(0);
+            }
 
             if(IDvector.empty())
             {
@@ -557,7 +579,8 @@ int main(int argc, char *argv[])
                 {
                     // Пришла команда выключения
 
-                    cout << endl << "Closing application." << endl << endl;
+                    cout << endl << "\"Kill All\" command was found." << endl;
+                    cout << "Closing application." << endl << endl;
                 }
 
 
