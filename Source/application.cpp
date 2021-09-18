@@ -32,14 +32,16 @@ using namespace zmq;
 
 // Команды Клиента
 #define ZMQ_CMD_IDRequest       10
-#define ZMQ_CMD_moreID          11
+#define ZMQ_CMD_MoreID          11
 #define ZMQ_CMD_KillAll         12
 #define ZMQ_CMD_KillCheck       13
+#define ZMQ_CMD_UpdateVector    14
 
 // Команды сервера
 #define ZMQ_CMD_ID              20
 #define ZMQ_CMD_IDVector        21
 #define ZMQ_CMD_Kill            22
+#define ZMQ_CMD_IDVectorUpdate  23
 
 
 /* ================================ Переменные ================================ */
@@ -329,10 +331,10 @@ int main(int argc, char *argv[])
 
             /* ======= Запрос следующего ID вектора ======= */
 
-                case ZMQ_CMD_moreID:
+                case ZMQ_CMD_MoreID:
 
                     #ifdef DETAIL_EXCHANGE_LOG
-                        cout << "Got command \"ZMQ_CMD_moreID\": " << ZMQ_CMD_moreID << endl;
+                        cout << "Got command \"ZMQ_CMD_MoreID\": " << ZMQ_CMD_MoreID << endl;
                     #endif // DETAIL_EXCHANGE_LOG
 
                     if(ZMQCommand.commanddata() < IDvector.size())
@@ -400,6 +402,30 @@ int main(int argc, char *argv[])
 
                     break;
 
+
+            /* ======= Запрос следующего ID вектора ======= */
+
+                case ZMQ_CMD_UpdateVector:
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << "Got command \"ZMQ_CMD_MoreID\": " << ZMQ_CMD_MoreID << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    if(ZMQCommand.commanddata() < IDvector.size())
+                    {
+                        ZMQCommand.set_applicationid(IDvector[ZMQCommand.commanddata()]);
+                        ZMQCommand.set_commanddata(currentApplicationID);
+                    }
+                    else ZMQCommand.set_applicationid(0);
+
+                    // Потому что для приема и передачи один экземпляр класса zmq_cmd
+                    temp = ZMQCommand.commanddata();
+                    ZMQCommand.set_commanddata(ZMQCommand.applicationid());
+                    ZMQCommand.set_applicationid(temp);
+
+                    ZMQCommand.set_commandid(ZMQ_CMD_IDVectorUpdate);
+
+                    break;
 
                 default:
                     break;
@@ -538,7 +564,7 @@ int main(int argc, char *argv[])
 
             // Запрос очередного ID у сервера
 
-            ZMQCommand.set_commandid(ZMQ_CMD_moreID);
+            ZMQCommand.set_commandid(ZMQ_CMD_MoreID);
             ZMQCommand.set_applicationid(currentApplicationID);
             ZMQCommand.set_commanddata(IDvector.size());
 
@@ -572,7 +598,7 @@ int main(int argc, char *argv[])
 
                 // Запрос очередного ID у сервера
 
-                ZMQCommand.set_commandid(ZMQ_CMD_moreID);
+                ZMQCommand.set_commandid(ZMQ_CMD_MoreID);
                 ZMQCommand.set_applicationid(currentApplicationID);
                 ZMQCommand.set_commanddata(IDvector.size());
 
@@ -667,8 +693,63 @@ int main(int argc, char *argv[])
                     exit(0);
                 }
 
+            /* ======= Обновление вектора активных приложений ======= */
+
+                IDvector.clear();
+                //IDvector.push_back(currentApplicationID);
+
+                // Запрос очередного ID у сервера
+
+                ZMQCommand.set_commandid(ZMQ_CMD_UpdateVector);
+                ZMQCommand.set_applicationid(currentApplicationID);
+                ZMQCommand.set_commanddata(IDvector.size());
+
+                zmqMessage.rebuild(ZMQCommand.SerializeAsString().c_str(), ZMQ_MESSAGE_SIZE);
+                zmqRequestSocket.send(zmqMessage);
+
+                #ifdef DETAIL_EXCHANGE_LOG
+                    cout << endl << "Protobuf replied struct:" << endl;
+                    cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                    cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                    cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                #endif // DETAIL_EXCHANGE_LOG
+
+                while(1)
+                {
+                    // Получение очередного ID от сервера
+
+                    zmqRequestSocket.recv(&zmqMessage);
+                    ZMQCommand.ParseFromArray(zmqMessage.data(), zmqMessage.size());
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << endl << "Protobuf recieved struct:" << endl;
+                        cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                        cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                        cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+
+                    if(ZMQCommand.commanddata() == 0) break;
+                    else IDvector.push_back(ZMQCommand.commanddata());
 
 
+                    // Запрос очередного ID у сервера
+
+                    ZMQCommand.set_commandid(ZMQ_CMD_UpdateVector);
+                    ZMQCommand.set_applicationid(currentApplicationID);
+                    ZMQCommand.set_commanddata(IDvector.size());
+
+                    zmqMessage.rebuild(ZMQCommand.SerializeAsString().c_str(), ZMQ_MESSAGE_SIZE);
+                    zmqRequestSocket.send(zmqMessage);
+
+                    #ifdef DETAIL_EXCHANGE_LOG
+                        cout << endl << "Protobuf replied struct:" << endl;
+                        cout << "\tcommandID: " << ZMQCommand.commandid() << endl;
+                        cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
+                        cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
+                    #endif // DETAIL_EXCHANGE_LOG
+                }
+
+                printIDVector(IDvector);
 
                 sleep(2);
             }
