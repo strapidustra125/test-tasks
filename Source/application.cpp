@@ -21,9 +21,15 @@ using namespace zmq;
 
 /* ================================ Константы ================================ */
 
-#define DETAIL_LOG
+//#define DETAIL_LOG
 //#define DETAIL_EXCHANGE_LOG
-#define DETAIL_CONNECT_LOG
+//#define DETAIL_CONNECT_LOG
+//#define DETAIL_STATISTIC_LOG
+//#define DETAIL_ID_LOG
+
+#define CLIENT_CYCLE_USEC       10000
+
+#define STAT_CHECH_COEFF        5
 
 #define ZMQ_MESSAGE_SIZE        10
 
@@ -81,7 +87,10 @@ using namespace zmq;
     // Флаг выключения всех команд
     bool flag_killAll = false;
 
+    // Флаг выключения всех команд
+    bool flag_realTimeID = false;
 
+    vector<pair<int, int>> clientStatistic;
 
 
 
@@ -109,24 +118,20 @@ void printIDVector(vector<int> vecID)
 {
     cout << endl << "Actieve applications ID:" << endl;
 
-    for(vector<int>::iterator it = vecID.begin(); it < vecID.end(); it++)
+    for(vector<int>::iterator i = vecID.begin(); i < vecID.end(); i++)
     {
-        cout << "\t" << *it << endl;
+        cout << "\t" << *i;
+        if(*i == currentApplicationID) cout << " *";
+
+        #ifdef DETAIL_ID_LOG
+            if(*i == serverID) cout << " s";
+        #endif // DETAIL_ID_LOG
+
+
+        cout << endl;
     }
 
     cout << endl;
-}
-
-// Обнуление значения переменных для нового сервера
-void initNewServer()
-{
-    // Удаляем ID сервера из вектора
-    vector<int>::iterator serverIDIter = find(IDvector.begin(), IDvector.end(), serverID);
-    if(serverIDIter != IDvector.end()) IDvector.erase(serverIDIter);
-
-    flag_isServer = ZMQ_SERVER;
-
-    serverID = currentApplicationID;
 }
 
 
@@ -157,17 +162,28 @@ void checkArguments(int argNumber, char *argList[])
         {
             // Закрыть все активные приложения
 
-            cout << "kill" << endl;
-
             flag_killAll = true;
         }
         else if(key == "-h" || key == "--help")
         {
             // Вывести справку
 
-            cout << "help" << endl;
+            cout << endl << "|----- ZMQ application help -----|" << endl;
+
+            cout << endl << "Application parametrs:" << endl;
+            cout << "\t-h --help     : Show this help information" << endl;
+            cout << "\t-k --kill     : Kill all active applications" << endl;
+            cout << "\t-r --realtime : Showing applications ID in real time" << endl;
+
+            cout << endl << "|----- Closing application ------|" << endl;
 
             exit(0);
+        }
+        else if(key == "-r" || key == "--realtime")
+        {
+            // Вывод в реальном времени
+
+            flag_realTimeID = true;
         }
         else
         {
@@ -176,9 +192,9 @@ void checkArguments(int argNumber, char *argList[])
 
             exit(0);
         }
-        
 
-        
+
+
 
     }
     else
@@ -188,6 +204,94 @@ void checkArguments(int argNumber, char *argList[])
 
         exit(0);
     }
+}
+
+
+void reinitClientStatistic()
+{
+    pair<int, int> p;
+    clientStatistic.clear();
+
+    for(vector<int>::iterator i = IDvector.begin(); i < IDvector.end(); i++)
+    {
+        p.first = *i;
+        p.second = 0;
+        clientStatistic.push_back(p);
+    }
+
+    #ifdef DETAIL_STATISTIC_LOG
+        cout << endl << "Client statistic vector" << endl;
+        for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+        {
+            cout << "\t" << "ID: " << i->first << ", ACKs: " << i->second << "." << endl;
+        }
+        cout << endl;
+    #endif // DETAIL_STATISTIC_LOG
+}
+
+
+void checkClientStatistic()
+{
+    unsigned int clientACKSum = 0;
+
+    if(IDvector.size() > 1)
+    {
+        for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+        {
+            clientACKSum += i->second;
+        }
+
+        // Максимум - каждый клиент ответил по 2 раза
+        // Минимум - все клиенты с нулями, а один ответил 2n раз
+        // n - число клиентов
+        if(clientACKSum > STAT_CHECH_COEFF * (IDvector.size() - 1))
+        {
+            #ifdef DETAIL_STATISTIC_LOG
+                cout << endl << "Client statistic vector" << endl;
+                for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+                {
+                    cout << "\t" << "ID: " << i->first << ", ACKs: " << i->second << "." << endl;
+                }
+                cout << endl;
+            #endif // DETAIL_STATISTIC_LOG
+
+            // Удаляем клиенты с нулями
+            for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+            {
+                // Если от клиента не приходят запросы
+                if(i->first != currentApplicationID && i->second == 0)
+                    IDvector.erase(find(IDvector.begin(), IDvector.end(), i->first));
+            }
+
+            // Обнуляем статистику клиентов
+            reinitClientStatistic();
+        }
+    }
+}
+
+
+
+void updateClientStatistic(int clientID)
+{
+    for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+    {
+        if(i->first == clientID) i->second++;
+    }
+}
+
+
+// Обнуление значения переменных для нового сервера
+void initNewServer()
+{
+    // Удаляем ID сервера из вектора
+    vector<int>::iterator serverIDIter = find(IDvector.begin(), IDvector.end(), serverID);
+    if(serverIDIter != IDvector.end()) IDvector.erase(serverIDIter);
+
+    flag_isServer = ZMQ_SERVER;
+
+    serverID = currentApplicationID;
+
+    reinitClientStatistic();
 }
 
 
@@ -282,17 +386,26 @@ int main(int argc, char *argv[])
                 currentApplicationID = genNewID(IDvector);
                 serverID = currentApplicationID;
                 IDvector.push_back(serverID);
+
+                cout << "Application ID: " << currentApplicationID << endl;
+
+                printIDVector(IDvector);
             }
 
-            cout << "Application ID: " << currentApplicationID << endl;
 
-            printIDVector(IDvector);
+
+            // Обнуляем статистику клиентов
+            reinitClientStatistic();
 
 
         /* ======= Рабочий цикл сервера ======= */
 
             while(1)
             {
+                #ifdef DETAIL_LOG
+                    printIDVector(IDvector);
+                #endif // DETAIL_LOG
+
                 zmqReplaySocket.recv(&zmqMessage);
 
                 ZMQCommand.ParseFromArray(zmqMessage.data(), zmqMessage.size());
@@ -317,6 +430,9 @@ int main(int argc, char *argv[])
                     #endif // DETAIL_EXCHANGE_LOG
 
                     IDvector.push_back(genNewID(IDvector));
+
+                    // Обнуляем статистику клиентов
+                    reinitClientStatistic();
 
                     #ifdef DETAIL_LOG
                         cout << endl << "New ID: " << IDvector.back() << endl << endl;
@@ -378,7 +494,18 @@ int main(int argc, char *argv[])
                     #ifdef DETAIL_EXCHANGE_LOG
                         cout << "Got command \"ZMQ_CMD_KillCheck\": " << ZMQ_CMD_KillCheck << endl;
                     #endif // DETAIL_EXCHANGE_LOG
-                    
+
+                    updateClientStatistic(ZMQCommand.applicationid());
+
+                    #ifdef DETAIL_STATISTIC_LOG
+                        cout << endl << "Client statistic vector" << endl;
+                        for(vector<pair<int, int>>::iterator i = clientStatistic.begin(); i < clientStatistic.end(); i++)
+                        {
+                            cout << "\t" << "ID: " << i->first << ", ACKs: " << i->second << "." << endl;
+                        }
+                        cout << endl;
+                    #endif // DETAIL_STATISTIC_LOG
+
                     if(flag_killAll)
                     {
                         ZMQCommand.set_commanddata(1);
@@ -386,9 +513,7 @@ int main(int argc, char *argv[])
                         it = find(IDvector.begin(), IDvector.end(), ZMQCommand.applicationid());
 
                         if(it != IDvector.end()) IDvector.erase(it);
-                        else cout << "Find ERROR!" << endl;                            
-                        
-                        
+                        else cout << "Find ERROR!" << endl;
                     }
                     else
                     {
@@ -397,8 +522,6 @@ int main(int argc, char *argv[])
 
                     ZMQCommand.set_applicationid(currentApplicationID);
                     ZMQCommand.set_commandid(ZMQ_CMD_Kill);
-
-                    
 
                     break;
 
@@ -448,7 +571,16 @@ int main(int argc, char *argv[])
 
                     exit(0);
                 }
+
+                checkClientStatistic();
+
+                if(flag_realTimeID)
+                {
+                    printIDVector(IDvector);
+                }
             }
+
+
 
             break;
 
@@ -622,8 +754,17 @@ int main(int argc, char *argv[])
             while (1)
             {
                 #ifdef DETAIL_LOG
-                    cout << "---------------------- New client iter ---------------------" << endl << endl;
+                    cout << "--------- New client iter ---------" << endl << endl;
+                    cout << "Connection status: " <<
+                        (zmqReplaySocket.connected() == 1 ? "connected" : "disconnected")
+                        << " with \"" << socketAddress << "\"" << endl << endl;
+                    printIDVector(IDvector);
                 #endif // DETAIL_LOG
+
+                if(flag_realTimeID)
+                {
+                    printIDVector(IDvector);
+                }
 
                 try
                 {
@@ -682,6 +823,8 @@ int main(int argc, char *argv[])
                     cout << "\tcommandData: " << ZMQCommand.commanddata() << endl;
                     cout << "\tapplicationID: " << ZMQCommand.applicationid() << endl << endl;
                 #endif // DETAIL_EXCHANGE_LOG
+
+                serverID = ZMQCommand.applicationid();
 
                 if(ZMQCommand.commanddata() == 1)
                 {
@@ -749,9 +892,7 @@ int main(int argc, char *argv[])
                     #endif // DETAIL_EXCHANGE_LOG
                 }
 
-                printIDVector(IDvector);
-
-                sleep(2);
+                usleep(CLIENT_CYCLE_USEC);
             }
 
 
